@@ -5,3 +5,4 @@ numpy
 matplotlib
 streamlit
 gdown
+huggingface_hub

@@ -18,77 +18,82 @@ import json
 import streamlit as st
 st.set_page_config(page_title="Corrosion Detection", layout="wide")
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import gdown
-import os
-from PIL import Image
-from torchvision import transforms
+from huggingface_hub import hf_hub_download
 
-# Your model class (MUST match training definition)
-
+# 1) Define the exact same model architecture
 class Corrosion_Detection(nn.Module):
     def __init__(self):
         super(Corrosion_Detection, self).__init__()
         self.network = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),    # network.0
-            nn.ReLU(),                                     # network.1
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),   # network.2
-            nn.ReLU(),                                     # network.3
-            nn.MaxPool2d(2),                               # network.4
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
 
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),  # network.5
-            nn.ReLU(),                                     # network.6
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), # network.7
-            nn.ReLU(),                                     # network.8
-            nn.MaxPool2d(2),                               # network.9
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
 
-            nn.Conv2d(128, 256, kernel_size=3, padding=1), # network.10
-            nn.ReLU(),                                     # network.11
-            nn.Conv2d(256, 256, kernel_size=3, padding=1), # network.12
-            nn.ReLU(),                                     # network.13
-            nn.MaxPool2d(2),                               # network.14
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
 
-            nn.Flatten(),                                  # network.15
-            nn.Linear(256 * 28 * 28, 1024),                # network.16 ✅ updated
-            nn.ReLU(),                                     # network.17
-            nn.Linear(1024, 512),                          # network.18 ✅ updated
-            nn.ReLU(),                                     # network.19
-            nn.Linear(512, 2)                              # network.20 ✅ updated
+            nn.Flatten(),
+            nn.Linear(256 * 28 * 28, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 2),
         )
+
     def forward(self, x):
         return self.network(x)
 
+# 2) Pull the weights from Hugging Face Hub (caches locally)
+MODEL_PATH = hf_hub_download(
+    repo_id="PriyaKulkarni2/corrosion_detection_model",
+    filename="Corrosion_Detection.pth"          # whatever you named it on HF
+)
 
-# Download model from Drive if not present
-MODEL_PATH = "Corrosion_Detection.pth"
-GOOGLE_DRIVE_FILE_ID = "your_actual_file_id_here"
-
-if not os.path.exists(MODEL_PATH):
-    st.info("Downloading model from Google Drive...")
-    url = f"https://drive.google.com/uc?id=1G6lgXM7kI4O4NLde42umWwEu6olcbKX5"
-    gdown.download(url, MODEL_PATH, quiet=False)
-
-# Load model
-try:
+# 3) Load into your model
+@st.cache_resource(show_spinner=False)
+def load_model(path: str):
+    st.write("Loading model…")
     model = Corrosion_Detection()
-    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
+    # If you saved state_dict:
+    state = torch.load(path, map_location="cpu")
+    # If it's a full-save, switch to `model = torch.load(path)`
+    model.load_state_dict(state)
     model.eval()
+    return model
 
-    transform = transforms.Compose([
+model = load_model(MODEL_PATH)
+
+# 4) Define any transforms once
+transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor()
-    ])
+    transforms.ToTensor(),
+])
 
-    weights = torch.load("Corrosion_Detection.pth", map_location='cpu')
+# 5) Streamlit UI
+st.title("Corrosion Detection")
+st.write("Upload an image to see corrosion vs. no-corrosion")
 
-    for key, value in weights.items():
-        print(f"{key}: {value.shape}")
+uploaded = st.file_uploader("Choose an image…", type=["png", "jpg", "jpeg"])
+if uploaded:
+    img = Image.open(uploaded).convert("RGB")
+    st.image(img, caption="Input", use_column_width=True)
 
-    st.success("Model loaded successfully!")
-except Exception as e:
-    st.error(f"Error loading model: {e}")
+    tensor = transform(img).unsqueeze(0)  # add batch dimension
+    with st.spinner("Running inference…"):
+        preds = model(tensor)
+        label = torch.argmax(preds, dim=1).item()
+        st.success("Prediction: **Corrosion**" if label == 1 else "Prediction: **No Corrosion**")
 
 # Rest of your Streamlit app (image upload, prediction)
 # ...

@@ -67,7 +67,7 @@ GOOGLE_DRIVE_FILE_ID = "your_actual_file_id_here"
 
 if not os.path.exists(MODEL_PATH):
     st.info("Downloading model from Google Drive...")
-    url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}"
+    url = f"https://drive.google.com/uc?id=1G6lgXM7kI4O4NLde42umWwEu6olcbKX5"
     gdown.download(url, MODEL_PATH, quiet=False)
 
 # Load model
